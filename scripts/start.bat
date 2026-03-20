@@ -1,25 +1,35 @@
 @echo off
-rem Start Docker Compose services for Dify
+rem start.bat - Start Conway's Game of Life services with Docker Compose
 
-echo Starting Docker Compose services for Dify...
+echo === Conway's Game of Life - Docker Compose startup ===
 
-rem Run Docker Compose up with error checking
-docker-compose up --detach
+echo Building images...
+docker compose build
+if %ERRORLEVEL% neq 0 (
+    echo Error: Docker Compose build failed.
+    exit /b %ERRORLEVEL%
+)
 
+echo Starting services (detached)...
+docker compose up --detach
 if %ERRORLEVEL% neq 0 (
     echo Error: Docker Compose failed to start.
     exit /b %ERRORLEVEL%
 )
 
-echo Docker Compose services started successfully.
-
-rem Optionally, you can add commands to check the status of the services
-echo Checking the status of Docker Compose services...
-docker-compose ps
-
+echo Service status:
+docker compose ps
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to check Docker Compose services status.
     exit /b %ERRORLEVEL%
 )
 
+echo.
+echo Ready!
+echo   Frontend  : http://localhost:3000
+echo   API docs  : http://localhost:8000/docs
+echo   API health: http://localhost:8000/health
+echo.
+echo   To stop:  docker compose down
+echo   To logs:  docker compose logs -f
 echo Done!
