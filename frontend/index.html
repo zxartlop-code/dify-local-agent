@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conway's Game of Life</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --dead: #0d1117;
+      --alive: #39d353;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --danger: #f85149;
+      --cell: 14px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      color: var(--accent);
+      margin-bottom: 0.25rem;
+      letter-spacing: 0.04em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .layout {
+      display: flex;
+      gap: 1.2rem;
+      align-items: flex-start;
+      width: 100%;
+      max-width: 1100px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ---- Sidebar ---- */
+    .sidebar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    select, input[type="number"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0.35rem 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 0.5rem;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-success { background: var(--accent2); color: #0d1117; }
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+
+    /* ---- Canvas area ---- */
+    .canvas-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    canvas {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: crosshair;
+      display: block;
+    }
+
+    .stats {
+      display: flex;
+      gap: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.88rem;
+    }
+
+    .stat-val { color: var(--accent); font-weight: 700; }
+
+    .controls {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .controls .btn {
+      width: auto;
+      padding: 0.45rem 1rem;
+    }
+
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .speed-row input { flex: 1; }
+
+    /* toast */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(2rem);
+      background: #21262d;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.85rem;
+      color: var(--text);
+      opacity: 0;
+      transition: opacity .3s, transform .3s;
+      pointer-events: none;
+      z-index: 99;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 600px) {
+      .sidebar { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Conway's Game of Life</h1>
+<p class="subtitle">细胞自动机 · Cellular Automaton</p>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div>
+      <div class="section-title">网格大小</div>
+      <label>行数 <span id="rowsVal">30</span></label>
+      <input type="range" id="rows" min="5" max="80" value="30" />
+      <label style="margin-top:.4rem">列数 <span id="colsVal">50</span></label>
+      <input type="range" id="cols" min="5" max="120" value="50" />
+    </div>
+
+    <div>
+      <div class="section-title">随机初始化</div>
+      <label>密度 <span id="densityVal">30</span>%</label>
+      <input type="range" id="density" min="1" max="99" value="30" />
+      <button class="btn btn-secondary" id="btnRandom" style="margin-top:.5rem">随机填充</button>
+    </div>
+
+    <div>
+      <div class="section-title">预设图案</div>
+      <select id="presetSelect">
+        <option value="">-- 选择预设 --</option>
+      </select>
+      <button class="btn btn-secondary" id="btnLoadPreset" style="margin-top:.5rem">载入预设</button>
+    </div>
+
+    <div>
+      <div class="section-title">操作</div>
+      <button class="btn btn-danger" id="btnClear">清空网格</button>
+    </div>
+
+    <div>
+      <div class="section-title">API 地址</div>
+      <input type="text" id="apiUrl" value="http://localhost:8000" style="font-size:.78rem" />
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap">
+    <div class="stats">
+      <span>代数 <span class="stat-val" id="statGen">0</span></span>
+      <span>存活 <span class="stat-val" id="statAlive">0</span></span>
+      <span>大小 <span class="stat-val" id="statSize">30×50</span></span>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div class="controls">
+      <button class="btn btn-success" id="btnPlay">▶ 运行</button>
+      <button class="btn btn-secondary" id="btnPause" disabled>⏸ 暂停</button>
+      <button class="btn btn-primary" id="btnStep">⏭ 单步</button>
+    </div>
+
+    <div class="speed-row">
+      <span>速度</span>
+      <input type="range" id="speed" min="1" max="30" value="10" style="width:140px" />
+      <span id="speedVal">10</span> fps
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =====================================================================
+   State
+   ===================================================================== */
+let grid = [];
+let generation = 0;
+let rows = 30;
+let cols = 50;
+let running = false;
+let rafId = null;
+let lastTick = 0;
+let fps = 10;
+
+const CELL = 14;       // px per cell
+const ALIVE_COLOR = '#39d353';
+const DEAD_COLOR  = '#0d1117';
+const GRID_COLOR  = '#21262d';
+
+/* =====================================================================
+   DOM refs
+   ===================================================================== */
+const canvas   = document.getElementById('canvas');
+const ctx      = canvas.getContext('2d');
+const apiInput = document.getElementById('apiUrl');
+
+function apiBase() { return apiInput.value.replace(/\/$/, ''); }
+
+/* =====================================================================
+   Grid helpers
+   ===================================================================== */
+function emptyGrid(r, c) {
+  return Array.from({length: r}, () => new Array(c).fill(0));
+}
+
+function countAlive(g) {
+  return g.reduce((s, row) => s + row.reduce((a, v) => a + v, 0), 0);
+}
+
+function resizeCanvas() {
+  canvas.width  = cols * CELL + 1;
+  canvas.height = rows * CELL + 1;
+}
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+function render() {
+  ctx.fillStyle = GRID_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = grid[r][c] ? ALIVE_COLOR : DEAD_COLOR;
+      ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 1, CELL - 1);
+    }
+  }
+
+  document.getElementById('statGen').textContent   = generation;
+  document.getElementById('statAlive').textContent = countAlive(grid);
+  document.getElementById('statSize').textContent  = `${rows}×${cols}`;
+}
+
+/* =====================================================================
+   API calls
+   ===================================================================== */
+async function apiCall(endpoint, body) {
+  const resp = await fetch(`${apiBase()}${endpoint}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+async function loadPresets() {
+  try {
+    const resp = await fetch(`${apiBase()}/presets`);
+    const data = await resp.json();
+    const sel = document.getElementById('presetSelect');
+    sel.innerHTML = '<option value="">-- 选择预设 --</option>';
+    data.presets.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p.replace(/_/g, ' ');
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    toast('无法连接到后端 API，请检查地址', 'warn');
+  }
+}
+
+async function doStep(steps = 1) {
+  try {
+    const data = await apiCall('/step', {grid, generation, steps});
+    grid = data.grid;
+    generation = data.generation;
+    render();
+  } catch (e) {
+    toast(`步进失败: ${e.message}`);
+    stopSim();
+  }
+}
+
+async function doRandom() {
+  try {
+    const density = parseInt(document.getElementById('density').value) / 100;
+    const data = await apiCall('/random', {rows, cols, density});
+    grid = data.grid;
+    generation = 0;
+    render();
+  } catch (e) {
+    toast(`随机失败: ${e.message}`);
+  }
+}
+
+async function doLoadPreset() {
+  const name = document.getElementById('presetSelect').value;
+  if (!name) { toast('请先选择一个预设'); return; }
+  try {
+    const data = await apiCall('/preset', {name, rows, cols});
+    grid = data.grid;
+    generation = 0;
+    render();
+  } catch (e) {
+    toast(`载入失败: ${e.message}`);
+  }
+}
+
+/* =====================================================================
+   Simulation loop
+   ===================================================================== */
+function loop(ts) {
+  if (!running) return;
+  if (ts - lastTick >= 1000 / fps) {
+    lastTick = ts;
+    doStep();
+  }
+  rafId = requestAnimationFrame(loop);
+}
+
+function startSim() {
+  if (running) return;
+  running = true;
+  document.getElementById('btnPlay').disabled  = true;
+  document.getElementById('btnPause').disabled = false;
+  document.getElementById('btnStep').disabled  = true;
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopSim() {
+  running = false;
+  cancelAnimationFrame(rafId);
+  document.getElementById('btnPlay').disabled  = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnStep').disabled  = false;
+}
+
+/* =====================================================================
+   Canvas interaction (draw/erase cells)
+   ===================================================================== */
+let painting = false;
+let paintValue = 1;
+
+function cellAt(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  return [Math.floor(y / CELL), Math.floor(x / CELL)];
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (running) return;
+  painting = true;
+  const [r, c] = cellAt(e);
+  if (r >= 0 && r < rows && c >= 0 && c < cols) {
+    paintValue = grid[r][c] ? 0 : 1;
+    grid[r][c] = paintValue;
+    render();
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!painting || running) return;
+  const [r, c] = cellAt(e);
+  if (r >= 0 && r < rows && c >= 0 && c < cols) {
+    grid[r][c] = paintValue;
+    render();
+  }
+});
+
+window.addEventListener('mouseup', () => { painting = false; });
+
+/* touch */
+function touchCell(e) {
+  e.preventDefault();
+  if (running) return;
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const r = Math.floor((touch.clientY - rect.top)  / CELL);
+  const c = Math.floor((touch.clientX - rect.left) / CELL);
+  if (r >= 0 && r < rows && c >= 0 && c < cols) {
+    grid[r][c] ^= 1;
+    render();
+  }
+}
+canvas.addEventListener('touchstart', touchCell, {passive: false});
+canvas.addEventListener('touchmove',  touchCell, {passive: false});
+
+/* =====================================================================
+   Control wiring
+   ===================================================================== */
+document.getElementById('btnPlay').addEventListener('click',  startSim);
+document.getElementById('btnPause').addEventListener('click', stopSim);
+document.getElementById('btnStep').addEventListener('click',  () => doStep(1));
+document.getElementById('btnRandom').addEventListener('click', doRandom);
+document.getElementById('btnLoadPreset').addEventListener('click', doLoadPreset);
+document.getElementById('btnClear').addEventListener('click', () => {
+  stopSim();
+  grid = emptyGrid(rows, cols);
+  generation = 0;
+  render();
+});
+
+function updateRowsCols() {
+  rows = parseInt(document.getElementById('rows').value);
+  cols = parseInt(document.getElementById('cols').value);
+  document.getElementById('rowsVal').textContent = rows;
+  document.getElementById('colsVal').textContent = cols;
+  stopSim();
+  grid = emptyGrid(rows, cols);
+  generation = 0;
+  resizeCanvas();
+  render();
+}
+
+document.getElementById('rows').addEventListener('input', updateRowsCols);
+document.getElementById('cols').addEventListener('input', updateRowsCols);
+
+document.getElementById('density').addEventListener('input', function() {
+  document.getElementById('densityVal').textContent = this.value;
+});
+
+document.getElementById('speed').addEventListener('input', function() {
+  fps = parseInt(this.value);
+  document.getElementById('speedVal').textContent = fps;
+});
+
+apiInput.addEventListener('change', loadPresets);
+
+/* =====================================================================
+   Toast
+   ===================================================================== */
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* =====================================================================
+   Init
+   ===================================================================== */
+resizeCanvas();
+grid = emptyGrid(rows, cols);
+render();
+loadPresets();
+</script>
+</body>
+</html>
